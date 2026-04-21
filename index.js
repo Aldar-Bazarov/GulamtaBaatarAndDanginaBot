@@ -51,22 +51,16 @@ const userStates = new Map();
 const userData = new Map();
 
 const emojis = [
-    { emoji: '🔴', name: 'Red' },
-    { emoji: '🟢', name: 'Green' },
-    { emoji: '🔵', name: 'Blue' },
-    { emoji: '🟡', name: 'Yellow' },
-    { emoji: '🟠', name: 'Orange' },
-    { emoji: '🟣', name: 'Purple' },
-    { emoji: '⚪', name: 'White' },
-    { emoji: '⚫', name: 'Black' },
-    { emoji: '🟤', name: 'Brown' },
-    { emoji: '⛷️', name: 'Skis' },
-    { emoji: '🏃‍♂️', name: 'Man Running' },
-    { emoji: '🚴‍♂️', name: 'Man Biking' },
-    { emoji: '🤸‍♂️', name: 'Man Cartwheeling' },
-    { emoji: '🏊‍♂️', name: 'Man Swimming' },
-    { emoji: '🚵‍♂️', name: 'Man Mountain Biking' },
-    { emoji: '🤾‍♂️', name: 'Man Playing Handball' }
+    { emoji: '🔴', name: 'Красный' },
+    { emoji: '🟢', name: 'Зелёный' },
+    { emoji: '🔵', name: 'Синий' },
+    { emoji: '🟡', name: 'Жёлтый' },
+    { emoji: '⚪', name: 'Белый' },
+    { emoji: '⚫', name: 'Чёрный' },
+    { emoji: '🏃‍♂️', name: 'Бегит' },
+    { emoji: '🚴‍♂️', name: 'Велосипед' },
+    { emoji: '🏊‍♂️', name: 'Пловец' },
+    { emoji: '🤾‍♂️', name: 'Волейбол' }
 ];
 
 async function loadUsers() {
@@ -91,8 +85,6 @@ async function init() {
 }
 
 function getMainMenu(userId) {
-    const isUserVerified = users[userId] && users[userId].joined;
-
     const keyboard = {
         reply_markup: {
             keyboard: [
@@ -112,14 +104,6 @@ function getMainMenu(userId) {
     return keyboard;
 }
 
-function removeKeyboard() {
-    return {
-        reply_markup: {
-            remove_keyboard: true
-        }
-    };
-}
-
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
@@ -130,7 +114,6 @@ bot.onText(/\/start/, async (msg) => {
         users[userId] = {
             joined: false,
             lastInvite: null,
-            invitesLeft: 3,
             admin: ADMIN_IDS.includes(parseInt(userId))
         };
         await saveUsers(users);
@@ -138,11 +121,11 @@ bot.onText(/\/start/, async (msg) => {
 
     const welcomeMessage = `👋 Добро пожаловать в бот-верификатор!
 
-Я помогу вам получить доступ к приватному каналу.
+Я помогу вам получить доступ к приватному каналу Гуламты.
 
 📌 *Что делать:*
 1️⃣ Нажмите кнопку "🚀 Начать" или отправьте /start
-2️⃣ Пройдите простую капчу (выберите эмодзи или совместите квадраты)
+2️⃣ Пройдите простую проверку (выберите эмодзи или совместите красные квадраты)
 3️⃣ Получите одноразовую ссылку для входа в канал
 4️⃣ Используйте ссылку в течение 1 минуты
 
@@ -235,8 +218,7 @@ async function sendMoveRedSquareCaptcha(chatId, userId) {
 
 async function completeVerification(chatId, userId, msg) {
     users[userId].joined = true;
-    users[userId].lastInvite = new Date().toISOString();
-    users[userId].invitesLeft--;
+    users[userId].lastInvite = null;
     await saveUsers(users);
 
     try {
@@ -256,11 +238,11 @@ async function completeVerification(chatId, userId, msg) {
             ]
         };
 
-        await bot.sendMessage(chatId, '👉 Нажмите кнопку для присоединения:', {
+        await bot.sendMessage(chatId, '👉 Нажмите кнопку для присоединения:\n\n⏰ Ссылка действительна 1 минуту', {
             reply_markup: keyboard
         });
 
-        await bot.sendMessage(chatId, '✅ Верификация завершена! Теперь вы можете получать ссылки через кнопку "🔗 Получить ссылку"',
+        await bot.sendMessage(chatId, '✅ Верификация завершена! Теперь вы можете получать ссылки через кнопку "🔗 Получить ссылку"\n\n⚠️ Следующую ссылку можно будет получить только через 1 час',
             getMainMenu(userId));
 
     } catch (error) {
@@ -287,49 +269,43 @@ bot.onText(/\/invite/, async (msg) => {
     const lastInvite = users[userId].lastInvite ? new Date(users[userId].lastInvite) : null;
     const now = new Date();
 
-    if (lastInvite && (now - lastInvite) > 7 * 24 * 60 * 60 * 1000) {
-        users[userId].invitesLeft = 3;
-        await saveUsers(users);
-        await bot.sendMessage(chatId, '🔄 Неделя прошла! Ваши лимиты приглашений обновлены.',
+    if (lastInvite && (now - lastInvite) < 60 * 60 * 1000) {
+        const remainingMinutes = Math.ceil((60 * 60 * 1000 - (now - lastInvite)) / (60 * 1000));
+        await bot.sendMessage(chatId,
+            `⏳ Вы уже получали ссылку недавно.\n\nСледующую ссылку можно будет получить через ${remainingMinutes} минут.\n\n⏰ Ссылка действительна 1 минуту и может быть использована только один раз.`,
             getMainMenu(userId));
+        return;
     }
 
-    if (users[userId].invitesLeft > 0) {
-        try {
-            await bot.sendMessage(chatId, '⏳ Создаю одноразовую ссылку... Подождите секунду.',
-                getMainMenu(userId));
+    try {
+        await bot.sendMessage(chatId, '⏳ Создаю одноразовую ссылку... Подождите секунду.',
+            getMainMenu(userId));
 
-            const inviteLink = await bot.createChatInviteLink(CHANNEL_ID, {
-                member_limit: 1,
-                expire_date: Math.floor(now / 1000) + 60
-            });
+        const inviteLink = await bot.createChatInviteLink(CHANNEL_ID, {
+            member_limit: 1,
+            expire_date: Math.floor(now / 1000) + 60
+        });
 
-            users[userId].lastInvite = now.toISOString();
-            users[userId].invitesLeft--;
-            await saveUsers(users);
+        users[userId].lastInvite = now.toISOString();
+        await saveUsers(users);
 
-            const remainingInvites = users[userId].invitesLeft;
-            const message = `✅ *Ссылка готова!*\n\n` +
-                `🔗 Ваша одноразовая ссылка:\n` +
-                `${inviteLink.invite_link}\n\n` +
-                `⏰ Ссылка действительна 1 минуту\n` +
-                `📊 Осталось приглашений на эту неделю: ${remainingInvites}\n\n` +
-                `👉 Нажмите на ссылку, чтобы присоединиться к каналу!`;
+        const message = `✅ *Ссылка готова!*\n\n` +
+            `🔗 Ваша одноразовая ссылка:\n` +
+            `${inviteLink.invite_link}\n\n` +
+            `⏰ Ссылка действительна 1 минуту\n` +
+            `🔒 Ссылка может быть использована только один раз\n\n` +
+            `👉 Нажмите на ссылку, чтобы присоединиться к каналу!\n\n` +
+            `⚠️ Следующую ссылку можно будет получить через 1 час`;
 
-            await bot.sendMessage(chatId, message, {
-                parse_mode: 'Markdown',
-                ...getMainMenu(userId)
-            });
+        await bot.sendMessage(chatId, message, {
+            parse_mode: 'Markdown',
+            ...getMainMenu(userId)
+        });
 
-        } catch (error) {
-            console.error('Ошибка создания ссылки:', error);
-            await bot.sendMessage(chatId,
-                '❌ Ошибка при создании ссылки. Убедитесь, что бот является администратором канала.',
-                getMainMenu(userId));
-        }
-    } else {
+    } catch (error) {
+        console.error('Ошибка создания ссылки:', error);
         await bot.sendMessage(chatId,
-            '🚫 Вы исчерпали недельный лимит приглашений (3 штуки).\n\nПопробуйте снова на следующей неделе.',
+            '❌ Ошибка при создании ссылки. Убедитесь, что бот является администратором канала.',
             getMainMenu(userId));
     }
 });
@@ -340,7 +316,6 @@ bot.onText(/\/help/, async (msg) => {
     const isAdmin = ADMIN_IDS.includes(parseInt(userId));
 
     let helpText = '📖 *Инструкция по использованию бота*\n\n' +
-        '👤 *Для обычных пользователей:*\n\n' +
         '1️⃣ *Начать верификацию*\n' +
         '   Нажмите кнопку "🚀 Начать" или отправьте команду /start\n\n' +
         '2️⃣ *Пройти капчу*\n' +
@@ -351,21 +326,13 @@ bot.onText(/\/help/, async (msg) => {
         '4️⃣ *Вступить в канал*\n' +
         '   Нажмите на полученную ссылку (действительна 1 минуту)\n\n' +
         '📌 *Важно:*\n' +
-        '• У вас есть 3 приглашения в неделю\n' +
         '• Ссылка одноразовая и действует 1 минуту\n' +
-        '• Если ссылка истекла, просто запросите новую\n';
-
-    if (isAdmin) {
-        helpText += '\n⚙️ *Для администраторов:*\n' +
-            '• Нажмите "⚙️ Админ-панель" или /admin\n' +
-            '• Просмотр всех пользователей\n' +
-            '• Сброс лимитов приглашений\n';
-    }
+        '• Следующую ссылку можно получить только через 1 час\n' +
+        '• Если ссылка истекла, подождите 1 час и запросите новую\n';
 
     helpText += '\n❓ *Частые проблемы:*\n' +
-        '• Не приходит ссылка? → Проверьте, что бот администратор канала\n' +
-        '• Ссылка не работает? → Запросите новую через /invite\n' +
-        '• Не можете пройти капчу? → Нажмите /start для новой попытки';
+        '• Ссылка не работает? → Подождите 1 час и запросите новую через /invite\n' +
+        '• Не можете пройти проверку? → Нажмите /start для новой попытки';
 
     await bot.sendMessage(chatId, helpText, {
         parse_mode: 'Markdown',
@@ -400,7 +367,6 @@ bot.onText(/\/admin/, async (msg) => {
         reply_markup: {
             inline_keyboard: [
                 [{ text: '👥 Просмотр пользователей', callback_data: 'admin_view_users' }],
-                [{ text: '🔄 Сбросить лимиты всем', callback_data: 'admin_reset_invites' }],
                 [{ text: '📈 Подробная статистика', callback_data: 'admin_stats' }],
                 [{ text: '🔙 Главное меню', callback_data: 'back_to_menu' }]
             ]
@@ -446,7 +412,7 @@ bot.on('callback_query', async (callbackQuery) => {
         const stats = {
             total: Object.keys(users).length,
             verified: Object.values(users).filter(u => u.joined).length,
-            totalInvites: Object.values(users).reduce((sum, u) => sum + (3 - u.invitesLeft), 0)
+            totalInvites: Object.values(users).filter(u => u.lastInvite !== null).length
         };
 
         await bot.editMessageText(
@@ -454,7 +420,7 @@ bot.on('callback_query', async (callbackQuery) => {
             `📊 Всего пользователей: ${stats.total}\n` +
             `✅ Верифицировано: ${stats.verified}\n` +
             `⏳ Ожидают: ${stats.total - stats.verified}\n` +
-            `🔗 Всего использовано приглашений: ${stats.totalInvites}\n\n` +
+            `🔗 Всего выдано ссылок: ${stats.totalInvites}\n\n` +
             `Нажмите "🔙 Главное меню" для возврата`,
             {
                 chat_id: chatId,
@@ -466,9 +432,10 @@ bot.on('callback_query', async (callbackQuery) => {
     }
 
     if (data === 'admin_view_users' && ADMIN_IDS.includes(parseInt(userId))) {
-        const usersList = Object.entries(users).map(([id, data]) =>
-            `${id}: joined=${data.joined}, invitesLeft=${data.invitesLeft}`
-        ).join('\n');
+        const usersList = Object.entries(users).map(([id, data]) => {
+            const lastInviteStr = data.lastInvite ? new Date(data.lastInvite).toLocaleString() : 'никогда';
+            return `${id}: joined=${data.joined}, lastInvite=${lastInviteStr}`;
+        }).join('\n');
 
         const message = usersList ? `👥 Пользователи:\n${usersList}` : 'Нет пользователей';
 
@@ -476,23 +443,6 @@ bot.on('callback_query', async (callbackQuery) => {
             await bot.sendMessage(chatId, message);
         } else {
             await bot.editMessageText(message, {
-                chat_id: chatId,
-                message_id: msg.message_id
-            });
-        }
-        return;
-    }
-
-    if (data === 'admin_reset_invites' && ADMIN_IDS.includes(parseInt(userId))) {
-        for (const uid in users) {
-            users[uid].invitesLeft = 3;
-        }
-        await saveUsers(users);
-
-        if (msg.text && msg.text.includes('Админ-панель')) {
-            await bot.sendMessage(chatId, '♻️ Лимиты приглашений сброшены для всех пользователей.');
-        } else {
-            await bot.editMessageText('♻️ Лимиты приглашений сброшены для всех пользователей.', {
                 chat_id: chatId,
                 message_id: msg.message_id
             });
