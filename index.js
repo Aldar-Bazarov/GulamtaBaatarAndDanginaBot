@@ -88,7 +88,7 @@ function getMainMenu(userId) {
     const keyboard = {
         reply_markup: {
             keyboard: [
-                [{ text: '🚀 Начать /start' }],
+                [{ text: '🔐 Пройти проверку /verify' }],
                 [{ text: '🔗 Получить ссылку /invite' }],
                 [{ text: '❓ Помощь /help' }]
             ],
@@ -104,27 +104,13 @@ function getMainMenu(userId) {
     return keyboard;
 }
 
-bot.onText(/\/start/, async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id.toString();
-
-    console.log(`👤 Пользователь ${userId} вызвал /start`);
-
-    if (!users[userId]) {
-        users[userId] = {
-            joined: false,
-            lastInvite: null,
-            admin: ADMIN_IDS.includes(parseInt(userId))
-        };
-        await saveUsers(users);
-    }
-
+async function sendWelcomeOnly(chatId, userId) {
     const welcomeMessage = `👋 Добро пожаловать в бот-верификатор!
 
 Я помогу вам получить доступ к приватному каналу Гуламты.
 
 📌 *Что делать:*
-1️⃣ Нажмите кнопку "🚀 Начать" или отправьте /start
+1️⃣ Нажмите кнопку "🔐 Пройти проверку"
 2️⃣ Пройдите простую проверку (выберите эмодзи или совместите красные квадраты)
 3️⃣ Получите одноразовую ссылку для входа в канал
 4️⃣ Используйте ссылку в течение 1 минуты
@@ -137,6 +123,23 @@ bot.onText(/\/start/, async (msg) => {
         parse_mode: 'Markdown',
         ...getMainMenu(userId)
     });
+}
+
+bot.onText(/\/verify/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+
+    console.log(`👤 Пользователь ${userId} вызвал /verify`);
+
+    if (!users[userId]) {
+        users[userId] = {
+            joined: false,
+            lastInvite: null,
+            admin: ADMIN_IDS.includes(parseInt(userId)),
+            welcomed: false
+        };
+        await saveUsers(users);
+    }
 
     if (users[userId].joined) {
         await bot.sendMessage(chatId, '✅ Вы уже верифицированы! 🎉\n\nНажмите "🔗 Получить ссылку" для входа в канал.',
@@ -148,6 +151,38 @@ bot.onText(/\/start/, async (msg) => {
         await sendEmojiCaptcha(chatId, userId);
     } else {
         await sendMoveRedSquareCaptcha(chatId, userId);
+    }
+});
+
+bot.onText(/\/start/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+
+    console.log(`👤 Пользователь ${userId} вызвал /start`);
+
+    const isNewUser = !users[userId];
+    if (isNewUser) {
+        users[userId] = {
+            joined: false,
+            lastInvite: null,
+            admin: ADMIN_IDS.includes(parseInt(userId)),
+            welcomed: false
+        };
+        await saveUsers(users);
+    }
+
+    if (isNewUser) {
+        await sendWelcomeOnly(chatId, userId);
+    } else {
+        let statusMessage = '';
+        if (users[userId].joined) {
+            statusMessage = '✅ Вы уже верифицированы! 🎉\n\n';
+        } else {
+            statusMessage = '👋 С возвращением!\n\n';
+        }
+
+        await bot.sendMessage(chatId, statusMessage + 'Используйте кнопки меню для навигации:',
+            getMainMenu(userId));
     }
 });
 
@@ -176,8 +211,8 @@ async function sendEmojiCaptcha(chatId, userId) {
     userStates.set(userId, States.CAPTCHA);
 
     await bot.sendMessage(chatId,
-        `🛑 Какой эмодзи ${correctEmoji.emoji} ${correctEmoji.name}? Выберите правильный вариант:`,
-        { reply_markup: keyboard }
+        `🛑 *Проверка безопасности*\n\nКакой эмодзи ${correctEmoji.emoji} ${correctEmoji.name}? Выберите правильный вариант:`,
+        { parse_mode: 'Markdown', reply_markup: keyboard }
     );
 }
 
@@ -210,9 +245,9 @@ async function sendMoveRedSquareCaptcha(chatId, userId) {
     };
 
     await bot.sendMessage(chatId,
-        `🛑 Совместите красные квадраты, перемещая нижний красный квадрат влево/вправо.\n\n` +
+        `🛑 *Проверка безопасности*\n\nСовместите красные квадраты, перемещая нижний красный квадрат влево/вправо.\n\n` +
         `${topRow.join('')}\n${bottomRow.join('')}`,
-        { reply_markup: keyboard }
+        { parse_mode: 'Markdown', reply_markup: keyboard }
     );
 }
 
@@ -227,9 +262,10 @@ async function completeVerification(chatId, userId, msg) {
             expire_date: Math.floor(Date.now() / 1000) + 60
         });
 
-        await bot.editMessageText('✅ Капча пройдена! Ваша ссылка-приглашение:', {
+        await bot.editMessageText('✅ *Капча пройдена!* Ваша ссылка-приглашение:', {
             chat_id: chatId,
-            message_id: msg.message_id
+            message_id: msg.message_id,
+            parse_mode: 'Markdown'
         });
 
         const keyboard = {
@@ -261,7 +297,7 @@ bot.onText(/\/invite/, async (msg) => {
 
     if (!users[userId] || !users[userId].joined) {
         await bot.sendMessage(chatId,
-            '❌ Вы ещё не верифицированы!\n\nСначала нажмите "🚀 Начать" или отправьте /start, чтобы пройти капчу.',
+            '❌ Вы ещё не верифицированы!\n\nСначала нажмите "🔐 Пройти проверку" или отправьте /verify, чтобы пройти капчу.',
             getMainMenu(userId));
         return;
     }
@@ -305,7 +341,7 @@ bot.onText(/\/help/, async (msg) => {
 
     let helpText = '📖 *Инструкция по использованию бота*\n\n' +
         '1️⃣ *Начать верификацию*\n' +
-        '   Нажмите кнопку "🚀 Начать" или отправьте команду /start\n\n' +
+        '   Нажмите кнопку "🔐 Пройти проверку" или отправьте команду /verify\n\n' +
         '2️⃣ *Пройти капчу*\n' +
         '   • Выберите правильный эмодзи из предложенных\n' +
         '   • Или совместите красные квадраты, используя стрелки\n\n' +
@@ -315,11 +351,10 @@ bot.onText(/\/help/, async (msg) => {
         '   Нажмите на полученную ссылку (действительна 1 минуту)\n\n' +
         '📌 *Важно:*\n' +
         '• Ссылка одноразовая и действует 1 минуту\n' +
-        '• Если ссылка истекла, запросите новую после повторной проверки\n';
-
-    helpText += '\n❓ *Частые проблемы:*\n' +
-        '• Ссылка не работает? → Подождите 1 час и запросите новую через /invite\n' +
-        '• Не можете пройти проверку? → Нажмите /start для новой попытки';
+        '• Если ссылка истекла, запросите новую через /invite\n\n' +
+        '❓ *Частые проблемы:*\n' +
+        '• Ссылка не работает? → Запросите новую через /invite\n' +
+        '• Не можете пройти проверку? → Нажмите /verify для новой попытки';
 
     await bot.sendMessage(chatId, helpText, {
         parse_mode: 'Markdown',
@@ -366,8 +401,9 @@ bot.onText(/\/admin/, async (msg) => {
     });
 });
 
-bot.onText(/🚀 Начать/, (msg) => {
-    bot.emit('text', { ...msg, text: '/start' });
+
+bot.onText(/🔐 Пройти проверку/, (msg) => {
+    bot.emit('text', { ...msg, text: '/verify' });
 });
 
 bot.onText(/🔗 Получить ссылку/, (msg) => {
@@ -446,7 +482,7 @@ bot.on('callback_query', async (callbackQuery) => {
         if (selectedEmoji === userInfo.captchaCorrect) {
             await completeVerification(chatId, userId, msg);
         } else {
-            await bot.editMessageText('❌ Неправильно. Отправьте /start для новой попытки.', {
+            await bot.editMessageText('❌ Неправильно. Отправьте /verify для новой попытки.', {
                 chat_id: chatId,
                 message_id: msg.message_id
             });
@@ -493,10 +529,11 @@ bot.on('callback_query', async (callbackQuery) => {
 
         try {
             await bot.editMessageText(
-                `🛑 Совместите красные квадраты:\n\n${topRow.join('')}\n${bottomRow.join('')}`,
+                `🛑 *Проверка безопасности*\n\nСовместите красные квадраты:\n\n${topRow.join('')}\n${bottomRow.join('')}`,
                 {
                     chat_id: chatId,
                     message_id: msg.message_id,
+                    parse_mode: 'Markdown',
                     reply_markup: keyboard
                 }
             );
