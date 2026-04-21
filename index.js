@@ -242,7 +242,7 @@ async function completeVerification(chatId, userId, msg) {
             reply_markup: keyboard
         });
 
-        await bot.sendMessage(chatId, '✅ Верификация завершена! Теперь вы можете получать ссылки через кнопку "🔗 Получить ссылку"\n\n⚠️ Следующую ссылку можно будет получить только через 1 час',
+        await bot.sendMessage(chatId, '✅ Верификация завершена! Теперь вы можете получать ссылки через кнопку "🔗 Получить ссылку"',
             getMainMenu(userId));
 
     } catch (error) {
@@ -266,27 +266,16 @@ bot.onText(/\/invite/, async (msg) => {
         return;
     }
 
-    const lastInvite = users[userId].lastInvite ? new Date(users[userId].lastInvite) : null;
-    const now = new Date();
-
-    if (lastInvite && (now - lastInvite) < 60 * 60 * 1000) {
-        const remainingMinutes = Math.ceil((60 * 60 * 1000 - (now - lastInvite)) / (60 * 1000));
-        await bot.sendMessage(chatId,
-            `⏳ Вы уже получали ссылку недавно.\n\nСледующую ссылку можно будет получить через ${remainingMinutes} минут.\n\n⏰ Ссылка действительна 1 минуту и может быть использована только один раз.`,
-            getMainMenu(userId));
-        return;
-    }
-
     try {
         await bot.sendMessage(chatId, '⏳ Создаю одноразовую ссылку... Подождите секунду.',
             getMainMenu(userId));
 
         const inviteLink = await bot.createChatInviteLink(CHANNEL_ID, {
             member_limit: 1,
-            expire_date: Math.floor(now / 1000) + 60
+            expire_date: Math.floor(Date.now() / 1000) + 60
         });
 
-        users[userId].lastInvite = now.toISOString();
+        users[userId].lastInvite = new Date().toISOString();
         await saveUsers(users);
 
         const message = `✅ *Ссылка готова!*\n\n` +
@@ -294,8 +283,7 @@ bot.onText(/\/invite/, async (msg) => {
             `${inviteLink.invite_link}\n\n` +
             `⏰ Ссылка действительна 1 минуту\n` +
             `🔒 Ссылка может быть использована только один раз\n\n` +
-            `👉 Нажмите на ссылку, чтобы присоединиться к каналу!\n\n` +
-            `⚠️ Следующую ссылку можно будет получить через 1 час`;
+            `👉 Нажмите на ссылку, чтобы присоединиться к каналу!`;
 
         await bot.sendMessage(chatId, message, {
             parse_mode: 'Markdown',
@@ -327,8 +315,7 @@ bot.onText(/\/help/, async (msg) => {
         '   Нажмите на полученную ссылку (действительна 1 минуту)\n\n' +
         '📌 *Важно:*\n' +
         '• Ссылка одноразовая и действует 1 минуту\n' +
-        '• Следующую ссылку можно получить только через 1 час\n' +
-        '• Если ссылка истекла, подождите 1 час и запросите новую\n';
+        '• Если ссылка истекла, запросите новую после повторной проверки\n';
 
     helpText += '\n❓ *Частые проблемы:*\n' +
         '• Ссылка не работает? → Подождите 1 час и запросите новую через /invite\n' +
