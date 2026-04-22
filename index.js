@@ -113,7 +113,7 @@ async function sendWelcomeOnly(chatId, userId) {
 1️⃣ Нажмите кнопку "🔐 Пройти проверку"
 2️⃣ Пройдите простую проверку (выберите эмодзи или совместите красные квадраты)
 3️⃣ Получите одноразовую ссылку для входа в канал
-4️⃣ Используйте ссылку в течение 15 секунд
+4️⃣ Используйте ссылку в течение 1 минуты
 
 💡 <i>Совет:</i> Если что-то непонятно, нажмите "❓ Помощь"
 
@@ -157,6 +157,7 @@ bot.onText(/\/verify/, async (msg) => {
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
+    const username = msg.from.username ? `@${msg.from.username}` : 'нет username';
 
     console.log(`👤 Пользователь ${userId} вызвал /start`);
 
@@ -262,23 +263,17 @@ async function completeVerification(chatId, userId, msg) {
             expire_date: Math.floor(Date.now() / 1000) + 60
         });
 
-        await bot.editMessageText('✅ <b>Капча пройдена!</b> Ваша ссылка-приглашение:', {
-            chat_id: chatId,
-            message_id: msg.message_id,
-            parse_mode: 'HTML'
-        });
-
         const keyboard = {
             inline_keyboard: [
                 [{ text: '🔗 Присоединиться к каналу', url: inviteLink.invite_link }]
             ]
         };
 
-        await bot.sendMessage(chatId, '👉 Нажмите кнопку для присоединения:\n\n⏰ Ссылка действительна 1 минуту', {
+        await bot.sendMessage(chatId, '✅ <b>Верификация пройдена!</b>\n\n👉 Нажмите кнопку для присоединения:\n\n⏰ Ссылка действительна 1 минуту', {
             reply_markup: keyboard
         });
 
-        await bot.sendMessage(chatId, '✅ Верификация завершена! Теперь вы можете получать ссылки через кнопку "🔗 Получить ссылку"',
+        await bot.sendMessage(chatId, 'Также вы теперь можете получать ссылки через кнопку "🔗 Получить ссылку"',
             getMainMenu(userId));
 
     } catch (error) {
@@ -482,9 +477,10 @@ bot.on('callback_query', async (callbackQuery) => {
         if (selectedEmoji === userInfo.captchaCorrect) {
             await completeVerification(chatId, userId, msg);
         } else {
-            await bot.editMessageText('❌ Неправильно. Отправьте /verify для новой попытки.', {
+            await bot.editMessageText('❌ <b>Неправильный ответ!</b>\n\nВы выбрали неверный эмодзи.\nОтправьте /verify для новой попытки.', {
                 chat_id: chatId,
-                message_id: msg.message_id
+                message_id: msg.message_id,
+                parse_mode: 'HTML'
             });
             userStates.delete(userId);
             userData.delete(userId);
@@ -502,7 +498,10 @@ bot.on('callback_query', async (callbackQuery) => {
                 await completeVerification(chatId, userId, msg);
                 return;
             } else {
-                await bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Позиции не совпадают!' });
+                await bot.answerCallbackQuery(callbackQuery.id, {
+                    text: '❌ Позиции не совпадают! Попробуйте ещё раз.',
+                    show_alert: true
+                });
                 return;
             }
         }
