@@ -354,7 +354,7 @@ bot.onText(/\/invite/, async (msg) => {
         return;
     }
 
-    const isSubscribed = await checkChannelSubscription(userId, 3); // 3 попытки с задержкой
+    const isSubscribed = await checkChannelSubscription(userId);
 
     if (!isSubscribed) {
         const subscribeMessage = `⚠️ <b>Требуется подписка!</b>\n\n` +
