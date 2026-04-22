@@ -7,6 +7,8 @@ const path = require('path');
 const TOKEN = process.env.BOT_TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+const REQUIRED_CHANNEL_ID = process.env.REQUIRED_CHANNEL_ID;
+const REQUIRED_CHANNEL_USERNAME = process.env.REQUIRED_CHANNEL_USERNAME || 'Гуламта | Студенческое объединение в Москве';
 
 if (!TOKEN) {
     console.error('❌ Ошибка: BOT_TOKEN не найден в .env файле!');
@@ -82,6 +84,20 @@ async function init() {
     users = await loadUsers();
     console.log('🤖 Бот запущен!');
     console.log(`Администраторы: ${ADMIN_IDS.join(', ')}`);
+}
+
+async function checkChannelSubscription(userId) {
+    if (!REQUIRED_CHANNEL_ID) return true;
+
+    try {
+        const chatMember = await bot.getChatMember(REQUIRED_CHANNEL_ID, userId);
+        const status = chatMember.status;
+
+        return ['creator', 'administrator', 'member', 'restricted'].includes(status);
+    } catch (error) {
+        console.error('Ошибка проверки подписки:', error);
+        return false;
+    }
 }
 
 function getMainMenu(userId) {
@@ -256,6 +272,26 @@ async function sendMoveRedSquareCaptcha(chatId, userId) {
 
 async function completeVerification(chatId, userId, msg) {
     const username = msg.from.username;
+
+    const isSubscribed = await checkChannelSubscription(userId);
+
+    if (!isSubscribed) {
+        const subscribeMessage = `⚠️ <b>Требуется подписка!</b>\n\n` +
+            `Для получения доступа к каналу необходимо сначала подписаться на ${REQUIRED_CHANNEL_USERNAME}.\n\n` +
+            `📌 <b>Как подписаться:</b>\n` +
+            `1️⃣ Нажмите на ссылку ниже\n` +
+            `2️⃣ Нажмите кнопку "Подписаться/Join"\n` +
+            `3️⃣ Вернитесь в этот чат и нажмите /verify снова\n\n` +
+            `🔗 <a href="https://t.me/${REQUIRED_CHANNEL_USERNAME.replace('@', '')}">Подписаться на ${REQUIRED_CHANNEL_USERNAME}</a>`;
+
+        await bot.sendMessage(chatId, subscribeMessage, {
+            parse_mode: 'HTML',
+            disable_web_page_preview: false,
+            ...getMainMenu(userId)
+        });
+        return;
+    }
+
     if (username && users[userId].username !== username) {
         users[userId].username = username;
     }
@@ -304,6 +340,21 @@ bot.onText(/\/invite/, async (msg) => {
         await bot.sendMessage(chatId,
             '❌ Вы ещё не верифицированы!\n\nСначала нажмите "🔐 Пройти проверку" или отправьте /verify, чтобы пройти капчу.',
             getMainMenu(userId));
+        return;
+    }
+
+    const isSubscribed = await checkChannelSubscription(userId);
+
+    if (!isSubscribed) {
+        const subscribeMessage = `⚠️ <b>Требуется подписка!</b>\n\n` +
+            `Для получения ссылки необходимо быть подписанным на ${REQUIRED_CHANNEL_USERNAME}.\n\n` +
+            `🔗 <a href="https://t.me/${REQUIRED_CHANNEL_USERNAME.replace('@', '')}">Подписаться на ${REQUIRED_CHANNEL_USERNAME}</a>\n\n` +
+            `После подписки нажмите /invite снова.`;
+
+        await bot.sendMessage(chatId, subscribeMessage, {
+            parse_mode: 'HTML',
+            ...getMainMenu(userId)
+        });
         return;
     }
 
