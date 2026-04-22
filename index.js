@@ -276,7 +276,7 @@ async function completeVerification(chatId, userId, msg) {
             ]
         };
 
-        await bot.sendMessage(chatId, '✅ <b>Верификация пройдена!</b>\n\n👉 Нажмите кнопку для присоединения:\n\n⏰ Ссылка действительна 1 минуту', {
+        await bot.sendMessage(chatId, '✅ Верификация пройдена!\n\n👉 Нажмите кнопку для присоединения:\n\n⏰ Ссылка действительна 1 минуту', {
             reply_markup: keyboard
         });
 
@@ -394,7 +394,6 @@ bot.onText(/\/admin/, async (msg) => {
             inline_keyboard: [
                 [{ text: '👥 Просмотр пользователей', callback_data: 'admin_view_users' }],
                 [{ text: '📈 Подробная статистика', callback_data: 'admin_stats' }],
-                [{ text: '📥 Экспорт списка', callback_data: 'admin_export' }],
                 [{ text: '🔙 Главное меню', callback_data: 'back_to_menu' }]
             ]
         }
@@ -458,28 +457,17 @@ bot.on('callback_query', async (callbackQuery) => {
         return;
     }
 
-    if (data === 'admin_export' && ADMIN_IDS.includes(parseInt(userId))) {
-        let csvContent = "ID,Username,Status,LastInvite\n";
-
-        Object.entries(users).forEach(([id, data]) => {
-            const username = data.username ? `@${data.username}` : '';
-            const status = data.joined ? 'Verified' : 'Not verified';
-            const lastInvite = data.lastInvite || '';
-            csvContent += `${id},${username},${status},${lastInvite}\n`;
-        });
-
-        await bot.sendDocument(chatId, Buffer.from(csvContent, 'utf-8'), {
-            filename: `users_export_${Date.now()}.csv`,
-            caption: '📊 Экспорт списка пользователей'
-        });
-        return;
-    }
-
     if (data === 'admin_view_users' && ADMIN_IDS.includes(parseInt(userId))) {
         const usersList = Object.entries(users)
             .sort(([, a], [, b]) => {
-                if (a.joined !== b.joined) return b.joined - a.joined;
-                return (a.username || '').localeCompare(b.username || '');
+                const dateA = a.lastInvite ? new Date(a.lastInvite) : new Date(0);
+                const dateB = b.lastInvite ? new Date(b.lastInvite) : new Date(0);
+
+                if (!a.lastInvite && !b.lastInvite) return 0;
+                if (!a.lastInvite) return -1;
+                if (!b.lastInvite) return 1;
+
+                return dateA - dateB;
             })
             .map(([id, data]) => {
                 const username = data.username ? `@${data.username}` : 'нет username';
@@ -487,16 +475,28 @@ bot.on('callback_query', async (callbackQuery) => {
                 const lastInviteStr = data.lastInvite ?
                     new Date(data.lastInvite).toLocaleString() : 'никогда';
 
-                return `${status} ${username} (ID: ${id})\n   📅 Последняя ссылка: ${lastInviteStr}`;
+                let recencyIndicator = '';
+                if (data.lastInvite) {
+                    const daysAgo = Math.floor((Date.now() - new Date(data.lastInvite)) / (1000 * 60 * 60 * 24));
+                    if (daysAgo === 0) recencyIndicator = ' 🔥 (сегодня)';
+                    else if (daysAgo === 1) recencyIndicator = ' 📆 (вчера)';
+                    else if (daysAgo < 7) recencyIndicator = ` 📅 (${daysAgo} дн. назад)`;
+                    else if (daysAgo < 30) recencyIndicator = ` 📅 (${Math.floor(daysAgo / 7)} нед. назад)`;
+                    else recencyIndicator = ` 🕒 (${Math.floor(daysAgo / 30)} мес. назад)`;
+                }
+
+                return `${status} ${username} (ID: ${id})\n   📅 Последняя ссылка: ${lastInviteStr}${recencyIndicator}`;
             })
             .join('\n\n');
 
         const totalUsers = Object.keys(users).length;
         const verifiedUsers = Object.values(users).filter(u => u.joined).length;
+        const usersWithInvites = Object.values(users).filter(u => u.lastInvite !== null).length;
 
         const message = usersList ?
             `👥 <b>Список пользователей</b>\n\n` +
-            `📊 Всего: ${totalUsers} | ✅ Верифицировано: ${verifiedUsers}\n\n` +
+            `📊 Всего: ${totalUsers} | ✅ Верифицировано: ${verifiedUsers} | 🔗 Получали ссылку: ${usersWithInvites}\n` +
+            `📌 <i>Пользователи отсортированы по дате получения ссылки (старые сверху, новые снизу)</i>\n\n` +
             `${usersList}` :
             'Нет пользователей';
 
