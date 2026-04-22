@@ -86,16 +86,29 @@ async function init() {
     console.log(`Администраторы: ${ADMIN_IDS.join(', ')}`);
 }
 
-async function checkChannelSubscription(userId) {
+async function checkChannelSubscription(userId, retryCount = 0) {
     if (!REQUIRED_CHANNEL_ID) return true;
 
     try {
         const chatMember = await bot.getChatMember(REQUIRED_CHANNEL_ID, userId);
         const status = chatMember.status;
+        const isSubscribed = ['creator', 'administrator', 'member', 'restricted'].includes(status);
 
-        return ['creator', 'administrator', 'member', 'restricted'].includes(status);
+        console.log(`Проверка подписки для ${userId}: статус=${status}, подписан=${isSubscribed}`);
+
+        if (!isSubscribed && retryCount < 2) {
+            console.log(`Пользователь ${userId} не подписан, повторная проверка через 2 сек... (попытка ${retryCount + 1})`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return checkChannelSubscription(userId, retryCount + 1);
+        }
+
+        return isSubscribed;
     } catch (error) {
         console.error('Ошибка проверки подписки:', error);
+        if (retryCount < 2) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return checkChannelSubscription(userId, retryCount + 1);
+        }
         return false;
     }
 }
@@ -279,15 +292,23 @@ async function completeVerification(chatId, userId, msg) {
         const subscribeMessage = `⚠️ <b>Требуется подписка!</b>\n\n` +
             `Для получения доступа к каналу необходимо сначала подписаться на ${REQUIRED_CHANNEL_USERNAME}.\n\n` +
             `📌 <b>Как подписаться:</b>\n` +
-            `1️⃣ Нажмите на ссылку ниже\n` +
-            `2️⃣ Нажмите кнопку "Подписаться/Join"\n` +
-            `3️⃣ Вернитесь в этот чат и нажмите /verify снова\n\n` +
-            `🔗 <a href="https://t.me/${REQUIRED_CHANNEL_USERNAME.replace('@', '')}">Подписаться на ${REQUIRED_CHANNEL_USERNAME}</a>`;
+            `1️⃣ Нажмите на кнопку ниже\n` +
+            `2️⃣ Нажмите "Подписаться/Join"\n` +
+            `3️⃣ Вернитесь и нажмите "✅ Проверить подписку"\n\n` +
+            `🔗 <a href="https://t.me/${REQUIRED_CHANNEL_USERNAME.replace('@', '')}">${REQUIRED_CHANNEL_USERNAME}</a>`;
+
+        const keyboard = {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '✅ Проверить подписку', callback_data: 'check_subscription' }]
+                ]
+            }
+        };
 
         await bot.sendMessage(chatId, subscribeMessage, {
             parse_mode: 'HTML',
             disable_web_page_preview: false,
-            ...getMainMenu(userId)
+            ...keyboard
         });
         return;
     }
@@ -343,17 +364,28 @@ bot.onText(/\/invite/, async (msg) => {
         return;
     }
 
-    const isSubscribed = await checkChannelSubscription(userId);
+    const isSubscribed = await checkChannelSubscription(userId, 3); // 3 попытки с задержкой
 
     if (!isSubscribed) {
         const subscribeMessage = `⚠️ <b>Требуется подписка!</b>\n\n` +
             `Для получения ссылки необходимо быть подписанным на ${REQUIRED_CHANNEL_USERNAME}.\n\n` +
-            `🔗 <a href="https://t.me/${REQUIRED_CHANNEL_USERNAME.replace('@', '')}">Подписаться на ${REQUIRED_CHANNEL_USERNAME}</a>\n\n` +
-            `После подписки нажмите /invite снова.`;
+            `📌 <b>Как подписаться:</b>\n` +
+            `1️⃣ Нажмите на кнопку ниже\n` +
+            `2️⃣ Нажмите "Подписаться/Join"\n` +
+            `3️⃣ Вернитесь и нажмите "✅ Проверить подписку"\n\n` +
+            `🔗 <a href="https://t.me/${REQUIRED_CHANNEL_USERNAME.replace('@', '')}">${REQUIRED_CHANNEL_USERNAME}</a>`;
+
+        const keyboard = {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '✅ Проверить подписку', callback_data: 'check_subscription' }]
+                ]
+            }
+        };
 
         await bot.sendMessage(chatId, subscribeMessage, {
             parse_mode: 'HTML',
-            ...getMainMenu(userId)
+            ...keyboard
         });
         return;
     }
@@ -479,6 +511,25 @@ bot.on('callback_query', async (callbackQuery) => {
     const data = callbackQuery.data;
 
     await bot.answerCallbackQuery(callbackQuery.id);
+
+    if (data === 'check_subscription') {
+        const isSubscribed = await checkChannelSubscription(userId, 3);
+
+        if (isSubscribed) {
+            await bot.sendMessage(chatId, '✅ Отлично! Вы подписаны на канал. Теперь можете продолжить верификацию.', getMainMenu(userId));
+            if (Math.random() < 0.5) {
+                await sendEmojiCaptcha(chatId, userId);
+            } else {
+                await sendMoveRedSquareCaptcha(chatId, userId);
+            }
+        } else {
+            await bot.answerCallbackQuery(callbackQuery.id, {
+                text: '❌ Вы ещё не подписались на канал. Пожалуйста, подпишитесь и нажмите проверку снова.',
+                show_alert: true
+            });
+        }
+        return;
+    }
 
     if (data === 'back_to_menu') {
         await bot.sendMessage(chatId, '🔙 Возврат в главное меню', getMainMenu(userId));
