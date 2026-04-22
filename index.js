@@ -109,18 +109,18 @@ async function sendWelcomeOnly(chatId, userId) {
 
 Я помогу вам получить доступ к приватному каналу Гуламты.
 
-📌 *Что делать:*
+📌 <b>Что делать:</b>
 1️⃣ Нажмите кнопку "🔐 Пройти проверку"
 2️⃣ Пройдите простую проверку (выберите эмодзи или совместите красные квадраты)
 3️⃣ Получите одноразовую ссылку для входа в канал
-4️⃣ Используйте ссылку в течение 1 минуты
+4️⃣ Используйте ссылку в течение 15 секунд
 
-💡 *Совет:* Если что-то непонятно, нажмите "❓ Помощь"
+💡 <i>Совет:</i> Если что-то непонятно, нажмите "❓ Помощь"
 
 Удачи! 🎉`;
 
     await bot.sendMessage(chatId, welcomeMessage, {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
         ...getMainMenu(userId)
     });
 }
@@ -211,8 +211,8 @@ async function sendEmojiCaptcha(chatId, userId) {
     userStates.set(userId, States.CAPTCHA);
 
     await bot.sendMessage(chatId,
-        `🛑 *Проверка безопасности*\n\nКакой эмодзи ${correctEmoji.emoji} ${correctEmoji.name}? Выберите правильный вариант:`,
-        { parse_mode: 'Markdown', reply_markup: keyboard }
+        `🛑 <b>Проверка безопасности</b>\n\nКакой эмодзи ${correctEmoji.emoji} ${correctEmoji.name}? Выберите правильный вариант:`,
+        { parse_mode: 'HTML', reply_markup: keyboard }
     );
 }
 
@@ -245,9 +245,9 @@ async function sendMoveRedSquareCaptcha(chatId, userId) {
     };
 
     await bot.sendMessage(chatId,
-        `🛑 *Проверка безопасности*\n\nСовместите красные квадраты, перемещая нижний красный квадрат влево/вправо.\n\n` +
+        `🛑 <b>Проверка безопасности</b>\n\nСовместите красные квадраты, перемещая нижний красный квадрат влево/вправо.\n\n` +
         `${topRow.join('')}\n${bottomRow.join('')}`,
-        { parse_mode: 'Markdown', reply_markup: keyboard }
+        { parse_mode: 'HTML', reply_markup: keyboard }
     );
 }
 
@@ -262,10 +262,10 @@ async function completeVerification(chatId, userId, msg) {
             expire_date: Math.floor(Date.now() / 1000) + 60
         });
 
-        await bot.editMessageText('✅ *Капча пройдена!* Ваша ссылка-приглашение:', {
+        await bot.editMessageText('✅ <b>Капча пройдена!</b> Ваша ссылка-приглашение:', {
             chat_id: chatId,
             message_id: msg.message_id,
-            parse_mode: 'Markdown'
+            parse_mode: 'HTML'
         });
 
         const keyboard = {
@@ -283,7 +283,7 @@ async function completeVerification(chatId, userId, msg) {
 
     } catch (error) {
         console.error('Ошибка создания ссылки:', error);
-        await bot.sendMessage(chatId, '❌ Ошибка при создании ссылки. Убедитесь, что бот является администратором канала.',
+        await bot.sendMessage(chatId, '❌ Ошибка при создании ссылки. Попробуйте ещё раз.',
             getMainMenu(userId));
     }
 
@@ -314,7 +314,7 @@ bot.onText(/\/invite/, async (msg) => {
         users[userId].lastInvite = new Date().toISOString();
         await saveUsers(users);
 
-        const message = `✅ *Ссылка готова!*\n\n` +
+        const message = `✅ <b>Ссылка готова!</b>\n\n` +
             `🔗 Ваша одноразовая ссылка:\n` +
             `${inviteLink.invite_link}\n\n` +
             `⏰ Ссылка действительна 1 минуту\n` +
@@ -322,7 +322,7 @@ bot.onText(/\/invite/, async (msg) => {
             `👉 Нажмите на ссылку, чтобы присоединиться к каналу!`;
 
         await bot.sendMessage(chatId, message, {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             ...getMainMenu(userId)
         });
 
@@ -339,25 +339,25 @@ bot.onText(/\/help/, async (msg) => {
     const userId = msg.from.id.toString();
     const isAdmin = ADMIN_IDS.includes(parseInt(userId));
 
-    let helpText = '📖 *Инструкция по использованию бота*\n\n' +
-        '1️⃣ *Начать верификацию*\n' +
+    let helpText = '📖 <b>Инструкция по использованию бота</b>\n\n' +
+        '1️⃣ <b>Начать верификацию</b>\n' +
         '   Нажмите кнопку "🔐 Пройти проверку" или отправьте команду /verify\n\n' +
-        '2️⃣ *Пройти капчу*\n' +
+        '2️⃣ <b>Пройти капчу</b>\n' +
         '   • Выберите правильный эмодзи из предложенных\n' +
         '   • Или совместите красные квадраты, используя стрелки\n\n' +
-        '3️⃣ *Получить ссылку*\n' +
+        '3️⃣ <b>Получить ссылку</b>\n' +
         '   После успешной капчи нажмите "🔗 Получить ссылку" или /invite\n\n' +
-        '4️⃣ *Вступить в канал*\n' +
+        '4️⃣ <b>Вступить в канал</b>\n' +
         '   Нажмите на полученную ссылку (действительна 1 минуту)\n\n' +
-        '📌 *Важно:*\n' +
+        '📌 <b>Важно:</b>\n' +
         '• Ссылка одноразовая и действует 1 минуту\n' +
         '• Если ссылка истекла, запросите новую через /invite\n\n' +
-        '❓ *Частые проблемы:*\n' +
+        '❓ <b>Частые проблемы:</b>\n' +
         '• Ссылка не работает? → Запросите новую через /invite\n' +
         '• Не можете пройти проверку? → Нажмите /verify для новой попытки';
 
     await bot.sendMessage(chatId, helpText, {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
         ...getMainMenu(userId)
     });
 });
@@ -378,8 +378,8 @@ bot.onText(/\/admin/, async (msg) => {
         unverified: Object.values(users).filter(u => !u.joined).length
     };
 
-    const adminMessage = `⚙️ *Админ-панель*\n\n` +
-        `📊 *Статистика:*\n` +
+    const adminMessage = `⚙️ <b>Админ-панель</b>\n\n` +
+        `📊 <b>Статистика:</b>\n` +
         `• Всего пользователей: ${stats.total}\n` +
         `• Верифицировано: ${stats.verified}\n` +
         `• Не верифицировано: ${stats.unverified}\n\n` +
@@ -396,7 +396,7 @@ bot.onText(/\/admin/, async (msg) => {
     };
 
     await bot.sendMessage(chatId, adminMessage, {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
         ...keyboard
     });
 });
@@ -439,7 +439,7 @@ bot.on('callback_query', async (callbackQuery) => {
         };
 
         await bot.editMessageText(
-            `📈 *Детальная статистика*\n\n` +
+            `📈 <b>Детальная статистика</b>\n\n` +
             `📊 Всего пользователей: ${stats.total}\n` +
             `✅ Верифицировано: ${stats.verified}\n` +
             `⏳ Ожидают: ${stats.total - stats.verified}\n` +
@@ -448,7 +448,7 @@ bot.on('callback_query', async (callbackQuery) => {
             {
                 chat_id: chatId,
                 message_id: msg.message_id,
-                parse_mode: 'Markdown'
+                parse_mode: 'HTML'
             }
         );
         return;
@@ -529,11 +529,11 @@ bot.on('callback_query', async (callbackQuery) => {
 
         try {
             await bot.editMessageText(
-                `🛑 *Проверка безопасности*\n\nСовместите красные квадраты:\n\n${topRow.join('')}\n${bottomRow.join('')}`,
+                `🛑 <b>Проверка безопасности</b>\n\nСовместите красные квадраты:\n\n${topRow.join('')}\n${bottomRow.join('')}`,
                 {
                     chat_id: chatId,
                     message_id: msg.message_id,
-                    parse_mode: 'Markdown',
+                    parse_mode: 'HTML',
                     reply_markup: keyboard
                 }
             );
