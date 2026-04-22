@@ -86,7 +86,7 @@ async function init() {
     console.log(`Администраторы: ${ADMIN_IDS.join(', ')}`);
 }
 
-async function checkChannelSubscription(userId, retryCount = 0) {
+async function checkChannelSubscription(userId) {
     if (!REQUIRED_CHANNEL_ID) return true;
 
     try {
@@ -95,20 +95,9 @@ async function checkChannelSubscription(userId, retryCount = 0) {
         const isSubscribed = ['creator', 'administrator', 'member', 'restricted'].includes(status);
 
         console.log(`Проверка подписки для ${userId}: статус=${status}, подписан=${isSubscribed}`);
-
-        if (!isSubscribed && retryCount < 2) {
-            console.log(`Пользователь ${userId} не подписан, повторная проверка через 2 сек... (попытка ${retryCount + 1})`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            return checkChannelSubscription(userId, retryCount + 1);
-        }
-
         return isSubscribed;
     } catch (error) {
         console.error('Ошибка проверки подписки:', error);
-        if (retryCount < 2) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            return checkChannelSubscription(userId, retryCount + 1);
-        }
         return false;
     }
 }
@@ -186,11 +175,12 @@ bot.onText(/\/verify/, async (msg) => {
         return;
     }
 
-    if (Math.random() < 0.5) {
-        await sendEmojiCaptcha(chatId, userId);
-    } else {
-        await sendMoveRedSquareCaptcha(chatId, userId);
-    }
+    // TODO: после конкурса оставить проверку с квадратами
+    // if (Math.random() < 0.5) {
+    await sendEmojiCaptcha(chatId, userId);
+    // } else {
+    //     await sendMoveRedSquareCaptcha(chatId, userId);
+    // }
 });
 
 bot.onText(/\/start/, async (msg) => {
@@ -516,12 +506,7 @@ bot.on('callback_query', async (callbackQuery) => {
         const isSubscribed = await checkChannelSubscription(userId, 3);
 
         if (isSubscribed) {
-            await bot.sendMessage(chatId, '✅ Отлично! Вы подписаны на канал. Теперь можете продолжить верификацию.', getMainMenu(userId));
-            if (Math.random() < 0.5) {
-                await sendEmojiCaptcha(chatId, userId);
-            } else {
-                await sendMoveRedSquareCaptcha(chatId, userId);
-            }
+            await bot.sendMessage(chatId, '✅ Отлично! Вы подписаны на канал. Нажмите "Получить ссылку" /invite', getMainMenu(userId));
         } else {
             await bot.answerCallbackQuery(callbackQuery.id, {
                 text: '❌ Вы ещё не подписались на канал. Пожалуйста, подпишитесь и нажмите проверку снова.',
