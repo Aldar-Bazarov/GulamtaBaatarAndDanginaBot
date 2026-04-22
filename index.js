@@ -506,7 +506,18 @@ bot.on('callback_query', async (callbackQuery) => {
         const isSubscribed = await checkChannelSubscription(userId, 3);
 
         if (isSubscribed) {
-            await bot.sendMessage(chatId, '✅ Отлично! Вы подписаны на канал. Нажмите "Получить ссылку" /invite', getMainMenu(userId));
+            await bot.sendMessage(chatId, '✅ Отлично! Вы подписаны на канал. Завершаю верификацию...', getMainMenu(userId));
+
+            const userInfo = userData.get(userId);
+            if (userInfo && userInfo.captchaCorrect) {
+                const fakeMsg = {
+                    chat: { id: chatId },
+                    from: { id: parseInt(userId), username: callbackQuery.from.username }
+                };
+                await completeVerification(chatId, userId, fakeMsg);
+            } else {
+                await bot.sendMessage(chatId, '⚠️ Пожалуйста, начните верификацию заново через /verify', getMainMenu(userId));
+            }
         } else {
             await bot.answerCallbackQuery(callbackQuery.id, {
                 text: '❌ Вы ещё не подписались на канал. Пожалуйста, подпишитесь и нажмите проверку снова.',
