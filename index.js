@@ -125,21 +125,31 @@ async function sendWelcomeOnly(chatId, userId) {
     });
 }
 
-bot.onText(/\/verify/, async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id.toString();
-
-    console.log(`👤 Пользователь ${userId} вызвал /verify`);
-
+async function getUserData(userId, username) {
     if (!users[userId]) {
         users[userId] = {
             joined: false,
             lastInvite: null,
             admin: ADMIN_IDS.includes(parseInt(userId)),
-            welcomed: false
+            welcomed: false,
+            username: username || null
         };
         await saveUsers(users);
+    } else if (username && users[userId].username !== username) {
+        users[userId].username = username;
+        await saveUsers(users);
     }
+    return users[userId];
+}
+
+bot.onText(/\/verify/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+    const username = msg.from.username;
+
+    console.log(`👤 Пользователь ${userId} (${username ? '@' + username : 'без username'}) вызвал /verify`);
+
+    await getUserData(userId, username);
 
     if (users[userId].joined) {
         await bot.sendMessage(chatId, '✅ Вы уже верифицированы! 🎉\n\nНажмите "🔗 Получить ссылку" для входа в канал.',
@@ -157,20 +167,12 @@ bot.onText(/\/verify/, async (msg) => {
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
-    const username = msg.from.username ? `@${msg.from.username}` : 'нет username';
+    const username = msg.from.username;
 
-    console.log(`👤 Пользователь ${userId} вызвал /start`);
+    console.log(`👤 Пользователь ${userId} (${username ? '@' + username : 'без username'}) вызвал /start`);
 
     const isNewUser = !users[userId];
-    if (isNewUser) {
-        users[userId] = {
-            joined: false,
-            lastInvite: null,
-            admin: ADMIN_IDS.includes(parseInt(userId)),
-            welcomed: false
-        };
-        await saveUsers(users);
-    }
+    await getUserData(userId, username);
 
     if (isNewUser) {
         await sendWelcomeOnly(chatId, userId);
@@ -253,6 +255,11 @@ async function sendMoveRedSquareCaptcha(chatId, userId) {
 }
 
 async function completeVerification(chatId, userId, msg) {
+    const username = msg.from.username;
+    if (username && users[userId].username !== username) {
+        users[userId].username = username;
+    }
+
     users[userId].joined = true;
     users[userId].lastInvite = null;
     await saveUsers(users);
@@ -289,6 +296,9 @@ async function completeVerification(chatId, userId, msg) {
 bot.onText(/\/invite/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
+    const username = msg.from.username;
+
+    await getUserData(userId, username);
 
     if (!users[userId] || !users[userId].joined) {
         await bot.sendMessage(chatId,
@@ -332,7 +342,6 @@ bot.onText(/\/invite/, async (msg) => {
 bot.onText(/\/help/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
-    const isAdmin = ADMIN_IDS.includes(parseInt(userId));
 
     let helpText = '📖 <b>Инструкция по использованию бота</b>\n\n' +
         '1️⃣ <b>Начать верификацию</b>\n' +
@@ -385,6 +394,7 @@ bot.onText(/\/admin/, async (msg) => {
             inline_keyboard: [
                 [{ text: '👥 Просмотр пользователей', callback_data: 'admin_view_users' }],
                 [{ text: '📈 Подробная статистика', callback_data: 'admin_stats' }],
+                [{ text: '📥 Экспорт списка', callback_data: 'admin_export' }],
                 [{ text: '🔙 Главное меню', callback_data: 'back_to_menu' }]
             ]
         }
@@ -395,7 +405,6 @@ bot.onText(/\/admin/, async (msg) => {
         ...keyboard
     });
 });
-
 
 bot.onText(/🔐 Пройти проверку/, (msg) => {
     bot.emit('text', { ...msg, text: '/verify' });
@@ -449,21 +458,80 @@ bot.on('callback_query', async (callbackQuery) => {
         return;
     }
 
+    if (data === 'admin_export' && ADMIN_IDS.includes(parseInt(userId))) {
+        let csvContent = "ID,Username,Status,LastInvite\n";
+
+        Object.entries(users).forEach(([id, data]) => {
+            const username = data.username ? `@${data.username}` : '';
+            const status = data.joined ? 'Verified' : 'Not verified';
+            const lastInvite = data.lastInvite || '';
+            csvContent += `${id},${username},${status},${lastInvite}\n`;
+        });
+
+        await bot.sendDocument(chatId, Buffer.from(csvContent, 'utf-8'), {
+            filename: `users_export_${Date.now()}.csv`,
+            caption: '📊 Экспорт списка пользователей'
+        });
+        return;
+    }
+
     if (data === 'admin_view_users' && ADMIN_IDS.includes(parseInt(userId))) {
-        const usersList = Object.entries(users).map(([id, data]) => {
-            const lastInviteStr = data.lastInvite ? new Date(data.lastInvite).toLocaleString() : 'никогда';
-            return `${id}: joined=${data.joined}, lastInvite=${lastInviteStr}`;
-        }).join('\n');
+        const usersList = Object.entries(users)
+            .sort(([, a], [, b]) => {
+                if (a.joined !== b.joined) return b.joined - a.joined;
+                return (a.username || '').localeCompare(b.username || '');
+            })
+            .map(([id, data]) => {
+                const username = data.username ? `@${data.username}` : 'нет username';
+                const status = data.joined ? '✅' : '❌';
+                const lastInviteStr = data.lastInvite ?
+                    new Date(data.lastInvite).toLocaleString() : 'никогда';
 
-        const message = usersList ? `👥 Пользователи:\n${usersList}` : 'Нет пользователей';
+                return `${status} ${username} (ID: ${id})\n   📅 Последняя ссылка: ${lastInviteStr}`;
+            })
+            .join('\n\n');
 
-        if (msg.text && msg.text.includes('Админ-панель')) {
-            await bot.sendMessage(chatId, message);
+        const totalUsers = Object.keys(users).length;
+        const verifiedUsers = Object.values(users).filter(u => u.joined).length;
+
+        const message = usersList ?
+            `👥 <b>Список пользователей</b>\n\n` +
+            `📊 Всего: ${totalUsers} | ✅ Верифицировано: ${verifiedUsers}\n\n` +
+            `${usersList}` :
+            'Нет пользователей';
+
+        if (message.length > 4000) {
+            await bot.sendMessage(chatId, '⚠️ Список слишком длинный. Отправляю частями...');
+
+            const chunks = [];
+            let currentChunk = '';
+
+            for (const line of usersList.split('\n\n')) {
+                if ((currentChunk + '\n\n' + line).length > 4000) {
+                    chunks.push(currentChunk);
+                    currentChunk = line;
+                } else {
+                    currentChunk += (currentChunk ? '\n\n' : '') + line;
+                }
+            }
+            if (currentChunk) chunks.push(currentChunk);
+
+            for (let i = 0; i < chunks.length; i++) {
+                await bot.sendMessage(chatId,
+                    `<b>Часть ${i + 1}/${chunks.length}</b>\n\n${chunks[i]}`,
+                    { parse_mode: 'HTML' }
+                );
+            }
         } else {
-            await bot.editMessageText(message, {
-                chat_id: chatId,
-                message_id: msg.message_id
-            });
+            if (msg.text && msg.text.includes('Админ-панель')) {
+                await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+            } else {
+                await bot.editMessageText(message, {
+                    chat_id: chatId,
+                    message_id: msg.message_id,
+                    parse_mode: 'HTML'
+                });
+            }
         }
         return;
     }
